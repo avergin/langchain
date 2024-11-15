@@ -714,8 +714,8 @@ defmodule LangChain.ChatModels.ChatAnthropic do
   defp relevant_event?("event: content_block_delta\n" <> _rest), do: true
   defp relevant_event?("event: content_block_start\n" <> _rest), do: true
   defp relevant_event?("event: message_delta\n" <> _rest), do: true
+  defp relevant_event?("event: message_start\n" <> _rest), do: true
   # ignoring
-  defp relevant_event?("event: message_start\n" <> _rest), do: false
   defp relevant_event?("event: ping\n" <> _rest), do: false
   defp relevant_event?("event: content_block_stop\n" <> _rest), do: false
   defp relevant_event?("event: message_stop\n" <> _rest), do: false
@@ -997,5 +997,28 @@ defmodule LangChain.ChatModels.ChatAnthropic do
   @impl ChatModel
   def restore_from_map(%{"version" => 1} = data) do
     ChatAnthropic.new(data)
+  end
+
+  def do_process_response(
+        model,
+        %{
+          "type" => "message_start",
+          "message" => %{"usage" => usage}
+        } = data
+      ) do
+    # Fire callback with input token count from initial message
+    Callbacks.fire(model.callbacks, :on_llm_token_usage, [
+      model,
+      TokenUsage.new!(%{input: Map.get(usage, "input_tokens")})
+    ])
+
+    # Return empty delta since this is just the start marker
+    %{
+      role: :assistant,
+      content: "",
+      status: :incomplete
+    }
+    |> MessageDelta.new()
+    |> to_response()
   end
 end
